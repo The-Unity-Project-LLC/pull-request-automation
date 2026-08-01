@@ -4,21 +4,20 @@ import os
 import sys
 from pathlib import Path
 
-from google import genai
-from google.genai.types import HttpOptions, HttpRetryOptions
+import anthropic
 
 
 def summarize(context: str) -> str | None:
-    """This function returns the summary from the Generative AI agent.
+    """This function returns the summary from the Anthropic Claude agent.
 
     Args:
         context(str): The context of the PR's commits that the summary is to be generated for.
 
     Returns:
-        str: The text return (Agentic AI Agent) summary of the PRs.
+        str: The text return summary of the PRs.
     """
 
-    # Send to Gemini
+    # Send to Claude
     try:
         prompt = (
             f"Analyze the following git diff and provide a PR description in github flavored Markdown, so the hashtags are marking the titles, and the bullets points are just bullet points. Dont add ```markdown``` to the response.\n\n"
@@ -39,10 +38,12 @@ def summarize(context: str) -> str | None:
             f"**Commits to analyze:**\n{context}"
         )
 
-        response = client.models.generate_content(
-            model=_config["ai_bot"]["model"], contents=prompt
+        response = client.messages.create(
+            model=_config["ai_bot"]["model"],
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}],
         )
-        response_text = response.text
+        response_text = response.content[0].text
     except Exception as e:
         print(f"AI Generation Error: {e}")
         exit(1)
@@ -51,16 +52,16 @@ def summarize(context: str) -> str | None:
 
 
 if __name__ == "__main__":
-    # Configure Gemini client
-    client = genai.Client(
-        api_key=os.getenv("GEMINI_GITHUB_REPORT_API_KEY"),
-        http_options=HttpOptions(
-            retry_options=HttpRetryOptions(
-                attempts=3,  # Total tries
-                initial_delay=2,  # Initial wait in seconds
-                max_delay=30,  # Max wait time
-            )
-        ),
+    current_file = Path(__file__).resolve()
+    current_dir = current_file.parent
+    _config = configparser.ConfigParser()
+    _config.read(os.path.join(current_dir, "config.ini"))
+    _number_of_sentences = _config["ai_bot"]["no_of_sentences"]
+    _model = _config["ai_bot"]["model"]
+
+    # Configure Anthropic client
+    client = anthropic.Anthropic(
+        api_key=os.getenv("CLAUDE_API_KEY"),
     )
 
     parser = argparse.ArgumentParser()
@@ -76,30 +77,24 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    try:
-        with open(args.file, "r") as f:
-            context = f.read()
-    except FileNotFoundError:
-        print(f"Error: The file '{args.file}' was not found.")
-
-    current_file = Path(__file__).resolve()
-    current_dir = current_file.parent
-    _config = configparser.ConfigParser()
-    _config.read(os.path.join(current_dir, "config.ini"))
-    _number_of_sentences = _config["ai_bot"]["no_of_sentences"]
-    _model = _config["ai_bot"]["model"]
-
-    if args.debug:
-        print(f"Number of sentences: {_number_of_sentences}")
-        print(f"Model: {_model}")
-
-    # Let's error if the user doesn't input a value for the user argument, since it is required for the prompt to Gemini Generative AI, and it is also required to find the recipient email in the user_report.json file.
+    # Let's error if the user doesn't input a value for the user argument
     if args.file == "" or args.file is None:
         print(
             "[ERROR] - The file argument cannot be empty. Please provide a valid file containing the current PR commit data.",
             file=sys.stderr,
         )
         exit(1)
+
+    try:
+        with open(args.file, "r") as f:
+            context = f.read()
+    except FileNotFoundError:
+        print(f"Error: The file '{args.file}' was not found.")
+        exit(1)
+
+    if args.debug:
+        print(f"Number of sentences: {_number_of_sentences}")
+        print(f"Model: {_model}")
 
     response_text = summarize(context=context)
 
@@ -108,7 +103,7 @@ if __name__ == "__main__":
             f.write(response_text)
     else:
         print(
-            "[ERROR] - Could not retrieve the report data from Gemini Generative AI...",
+            "[ERROR] - Could not retrieve the report data from Anthropic Claude...",
             file=sys.stderr,
         )
         exit(1)

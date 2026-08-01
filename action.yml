@@ -12,8 +12,8 @@ inputs:
         required: true
         default: None
 
-    gemini_api_token:
-        description: "The Gemini API Token needed to run functions in the repo - use {{ secrets.GEMINI_GITHUB_REPORT_API_KEY }} from your repo secrets."
+    claude_api_token:
+        description: "The Claude API Token needed to run functions in the repo - use {{ secrets.CLAUDE_API_KEY }} from your repo secrets."
         required: true
         default: None
 
@@ -53,14 +53,14 @@ runs:
         - name: Install Dependencies
           run: |
               python -m pip install --upgrade pip
-              pip install google-genai
+              pip install anthropic
           shell: bash
 
-        - name: Run Gemini PR Summary
+        - name: Run Claude PR Summary
           id: pr-summary
           env:
               GH_TOKEN: ${{ inputs.github_token }}
-              GEMINI_GITHUB_REPORT_API_KEY: ${{ inputs.gemini_api_token }}
+              CLAUDE_API_KEY: ${{ inputs.claude_api_token }}
           shell: bash
           run: |
               set -o pipefail
